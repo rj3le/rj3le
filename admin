@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>عوّضني | لوحة التحكم</title>
+<style>
+:root{--g:#0B6E4F;--y:#F5B700;--bg:#F4FBF7;--tx:#12261F;--er:#E5484D;--mu:#5d7168;--ln:#dbe8e1}
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{background:var(--g);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+header b{font-size:18px}
+nav{display:flex;gap:8px;padding:12px 16px;overflow-x:auto}
+nav button{border:1px solid var(--ln);background:#fff;color:var(--tx);padding:9px 16px;border-radius:20px;white-space:nowrap}
+nav button.on{background:var(--g);color:#fff;border-color:var(--g)}
+main{max-width:760px;margin:0 auto;padding:0 16px 40px}
+.card{background:#fff;border:1px solid var(--ln);border-radius:14px;padding:14px;margin:0 0 12px}
+.card h3{margin:0 0 6px;font-size:16px}
+.mu{color:var(--mu);font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+input,select,textarea{font:inherit;padding:9px 10px;border:1px solid var(--ln);border-radius:10px;background:#fff;color:var(--tx);max-width:100%}
+.f{display:grid;gap:8px}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:9px 14px}
+.p{background:var(--g);color:#fff}.y{background:var(--y)}.d{background:var(--er);color:#fff}.l{background:#e9f3ee;color:var(--g)}
+button:disabled{opacity:.5}
+img.inv{width:100%;max-height:340px;object-fit:contain;background:#eef5f1;border-radius:10px;margin:8px 0;min-height:60px;cursor:zoom-in}
+.t{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:90%;background:#12261F;color:#fff;padding:12px 16px;border-radius:12px;text-align:center;z-index:9}
+.lg{max-width:360px;margin:12vh auto;padding:0 16px}
+.lg h1{color:var(--g);text-align:center;margin-bottom:4px}
+.lg input{width:100%}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const U='https://nmxcqvyqiedfawzjggjh.supabase.co',K='sb_publishable_I2E7UppSswK30sJA6Uv_fA_CS0kb9g3';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const n=x=>Number(x||0).toLocaleString('en-US');
+const ERR={forbidden:'ليس لديك صلاحية لهذا الإجراء',forbidden_edit_amount:'ليس لديك صلاحية تعديل المبلغ',forbidden_cashback_edit:'ليس لديك صلاحية تعديل نسبة الكاش باك',already_reviewed:'تمت مراجعة هذه الفاتورة سابقاً',already_processed:'تمت معالجة هذا الطلب سابقاً',invalid_amount:'المبلغ غير صحيح'};
+const msg=e=>ERR[e.message]||e.message;
+let S=null,P=null,tab='inv',reasons=[];
+try{S=JSON.parse(localStorage.getItem('aw_s')||'null')}catch{}
+
+const save=d=>{S={access_token:d.access_token,refresh_token:d.refresh_token,user:{id:d.user.id}};try{localStorage.setItem('aw_s',JSON.stringify(S))}catch{}};
+function toast(m){const t=document.createElement('div');t.className='t';t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),3500)}
+function out(){S=null;P=null;try{localStorage.removeItem('aw_s')}catch{}login()}
+async function refresh(){try{const r=await fetch(U+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:K,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:S.refresh_token})});const d=await r.json();if(!r.ok){out();return false}save(d);return true}catch{return false}}
+async function api(path,opt={},retry=true){
+  const h={apikey:K,'Content-Type':'application/json',...(opt.headers||{})};
+  if(S)h.Authorization='Bearer '+S.access_token;
+  const r=await fetch(U+path,{...opt,headers:h});
+  if(r.status===401&&S&&retry&&await refresh())return api(path,opt,false);
+  const t=await r.text();let d=null;try{d=t?JSON.parse(t):null}catch{d=t}
+  if(!r.ok)throw new Error((d&&(d.message||d.msg||d.error_description))||'خطأ في الاتصال');
+  return d}
+const rpc=(f,b)=>api('/rest/v1/rpc/'+f,{method:'POST',body:JSON.stringify(b)});
+const can=p=>P&&(P.role==='admin'||(P.permissions||[]).includes(p));
+const TABS=[['inv','الفواتير',()=>can('invoices_view')||can('invoices_review')],['wd','السحوبات',()=>can('withdrawals_process')],['st','المتاجر',()=>can('stores_manage')]];
+
+function login(){$('#app').innerHTML=`<div class="lg"><h1>عوّضني</h1><p class="mu" style="text-align:center">لوحة التحكم</p><div class="f"><input id="em" type="email" placeholder="الإيميل" autocomplete="username" dir="ltr"><input id="pw" type="password" placeholder="كلمة السر" autocomplete="current-password" dir="ltr"><button class="p" data-a="login">دخول</button></div></div>`}
+
+async function boot(){
+  if(!S)return login();
+  try{
+    P=(await api('/rest/v1/profiles?id=eq.'+S.user.id+'&select=role,permissions,full_name'))[0];
+    if(!P||!['admin','staff'].includes(P.role)){toast('ليس لديك صلاحية دخول لوحة التحكم');return out()}
+    reasons=await api('/rest/v1/reject_reasons?select=text_ar&order=sort_order');
+    shell();
+  }catch(e){toast(msg(e));out()}
+}
+function shell(){
+  const ts=TABS.filter(t=>t[2]());
+  if(!ts.find(t=>t[0]===tab))tab=ts[0]&&ts[0][0];
+  $('#app').innerHTML=`<header><b>عوّضني</b><span>${esc(P.full_name||'')} <button class="l" data-a="out">خروج</button></span></header><nav>${ts.map(t=>`<button class="${t[0]===tab?'on':''}" data-a="tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</nav><main id="m"></main>`;
+  view()}
+async function view(){
+  $('#m').innerHTML='<p class="mu">جاري التحميل...</p>';
+  try{await({inv,wd,st})[tab]()}catch(e){$('#m').innerHTML='<p>'+esc(msg(e))+'</p>'}}
+
+async function inv(){
+  const r=await api('/rest/v1/invoices?status=eq.pending&select=id,amount,invoice_number,invoice_date,image_path,stores(name_ar,cashback_percent),profiles!invoices_user_id_fkey(email,phone)&order=created_at.asc&limit=30');
+  $('#m').innerHTML=`<p class="mu">فواتير قيد المراجعة: ${r.length}</p>`+(r.map(i=>`<div class="card" data-amt="${i.amount}"><h3>${esc(i.stores?.name_ar)} <span class="mu">(${i.stores?.cashback_percent}%)</span></h3><div class="mu">${esc(i.profiles?.email)} ${esc(i.profiles?.phone||'')}</div><img class="inv" data-a="zoom" data-p="${esc(i.image_path)}" alt=""><div class="mu">رقم الفاتورة: <b>${esc(i.invoice_number)}</b> · التاريخ: ${esc(i.invoice_date)}</div><div class="row"><label>المبلغ</label><input class="amt" type="number" value="${i.amount}" ${can('invoices_edit_amount')?'':'readonly'}>${can('invoices_review')?`<button class="p" data-a="ok" data-id="${i.id}">قبول</button>`:''}</div>${can('invoices_review')?`<div class="row"><select class="rsel"><option value="">سبب الرفض...</option>${reasons.map(x=>`<option>${esc(x.text_ar)}</option>`).join('')}</select><input class="rtxt" placeholder="أو اكتب سبباً"><button class="d" data-a="no" data-id="${i.id}">رفض</button></div>`:''}</div>`).join('')||'<p>لا توجد فواتير جديدة ✅</p>');
+  document.querySelectorAll('img[data-p]').forEach(async im=>{try{const d=await api('/storage/v1/object/sign/invoices/'+im.dataset.p.split('/').map(encodeURIComponent).join('/'),{method:'POST',body:JSON.stringify({expiresIn:900})});im.src=U+'/storage/v1'+d.signedURL}catch{}})}
+
+async function wd(){
+  const r=await api('/rest/v1/withdrawals?status=eq.pending&select=id,amount,method,transfer_number,profiles!withdrawals_user_id_fkey(email,phone)&order=created_at.asc&limit=50');
+  $('#m').innerHTML=`<p class="mu">طلبات سحب بانتظارك: ${r.length}</p>`+(r.map(w=>`<div class="card"><h3>${n(w.amount)} د.ع · ${w.method==='zaincash'?'زين كاش':'ماستر كارد'}</h3><div class="mu">${esc(w.profiles?.email)} ${esc(w.profiles?.phone||'')}</div><div class="row"><b dir="ltr">${esc(w.transfer_number)}</b><button class="l" data-a="copy" data-v="${esc(w.transfer_number)}">نسخ</button></div><div class="row"><input class="ref" placeholder="رقم الوصل (اختياري)"><button class="p" data-a="paid" data-id="${w.id}">تم التحويل</button></div><div class="row"><input class="rtxt" placeholder="سبب الرفض"><button class="d" data-a="wno" data-id="${w.id}">رفض</button></div></div>`).join('')||'<p>لا توجد طلبات سحب ✅</p>')
+  +(can('wallet_reset')?`<div class="card"><h3>تصفير حساب زبون</h3><div class="row"><input id="rem" type="email" placeholder="إيميل الزبون" dir="ltr"><button class="l" data-a="find">بحث</button></div><div id="rb"></div></div>`:'')}
+
+async function st(){
+  const [r,c]=await Promise.all([api('/rest/v1/stores?select=id,name_ar,cashback_percent,is_active,categories(name_ar)&order=created_at.desc&limit=100'),api('/rest/v1/categories?select=id,name_ar&order=sort_order')]);
+  $('#m').innerHTML=`<div class="card"><h3>إضافة متجر</h3><div class="f"><input id="n1" placeholder="اسم المتجر (عربي)"><input id="n2" placeholder="Store name (English)" dir="ltr"><select id="ct">${c.map(x=>`<option value="${x.id}">${esc(x.name_ar)}</option>`).join('')}</select><input id="ci" placeholder="المدينة"><input id="pc" type="number" step="0.5" placeholder="نسبة الكاش باك %"><input id="ph" placeholder="رقم التلفون" dir="ltr"><input id="ig" placeholder="رابط الانستغرام" dir="ltr"><input id="ll" placeholder="الإحداثيات مثل 36.19,44.01 (من خرائط جوجل)" dir="ltr"><div class="row"><label>يفتح</label><input id="o1" type="time"><label>يغلق</label><input id="o2" type="time"></div><textarea id="ab" placeholder="نبذة عن المتجر" rows="2"></textarea><div class="row"><label>الشعار</label><input id="lg" type="file" accept="image/*"></div><button class="p" data-a="addst">إضافة المتجر</button></div></div>`
+  +r.map(s=>`<div class="card"><h3>${esc(s.name_ar)} <span class="mu">${esc(s.categories?.name_ar)}${s.is_active?'':' · متوقف'}</span></h3><div class="row"><input class="pct" type="number" step="0.5" value="${s.cashback_percent}" style="width:90px"> %<button class="l" data-a="savepct" data-id="${s.id}">حفظ النسبة</button><button class="l" data-a="tog" data-id="${s.id}" data-v="${s.is_active}">${s.is_active?'إيقاف':'تفعيل'}</button></div></div>`).join('')}
+
+async function act(a,id,card,b){
+  if(a==='login'){
+    const r=await fetch(U+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:K,'Content-Type':'application/json'},body:JSON.stringify({email:$('#em').value.trim(),password:$('#pw').value})});
+    const d=await r.json();if(!r.ok)throw new Error('الإيميل أو كلمة السر غير صحيحة');save(d);return boot()}
+  if(a==='out')return out();
+  if(a==='tab'){tab=id;return shell()}
+  if(a==='zoom')return b.src&&window.open(b.src,'_blank');
+  if(a==='copy'){navigator.clipboard.writeText(b.dataset.v);return toast('تم النسخ')}
+  if(a==='ok'){const v=Number(card.querySelector('.amt').value);await rpc('approve_invoice',{p_invoice:id,p_amount:v!==Number(card.dataset.amt)?v:null});card.remove();return toast('تم قبول الفاتورة وإضافة الرصيد')}
+  if(a==='no'||a==='wno'){
+    const why=card.querySelector('.rtxt').value.trim()||(card.querySelector('.rsel')||{}).value;
+    if(!why)throw new Error('اختر أو اكتب سبب الرفض');
+    if(a==='no')await rpc('reject_invoice',{p_invoice:id,p_reason:why});else await rpc('reject_withdrawal',{p_id:id,p_reason:why});
+    card.remove();return toast('تم الرفض')}
+  if(a==='paid'){await rpc('mark_withdrawal_paid',{p_id:id,p_ref:card.querySelector('.ref').value.trim()||null});card.remove();return toast('تم تسجيل التحويل')}
+  if(a==='find'){
+    const e=$('#rem').value.trim().toLowerCase();
+    const u=(await api('/rest/v1/profiles?email=eq.'+encodeURIComponent(e)+'&select=id,email'))[0];
+    if(!u)throw new Error('لم يتم العثور على الزبون');
+    const t=await api('/rest/v1/wallet_transactions?user_id=eq.'+u.id+'&select=amount');
+    $('#rb').innerHTML=`<p>${esc(u.email)}: الرصيد <b>${n(t.reduce((s,x)=>s+Number(x.amount),0))}</b> د.ع</p><button class="d" data-a="reset" data-id="${u.id}">تصفير الحساب</button>`;return}
+  if(a==='reset'){if(!confirm('تأكيد تصفير الحساب؟'))return;await rpc('reset_wallet',{p_user:id,p_note:'تصفير من لوحة التحكم'});$('#rb').innerHTML='';return toast('تم تصفير الحساب')}
+  if(a==='savepct'){await api('/rest/v1/stores?id=eq.'+id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({cashback_percent:Number(card.querySelector('.pct').value)})});return toast('تم حفظ النسبة')}
+  if(a==='tog'){await api('/rest/v1/stores?id=eq.'+id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({is_active:b.dataset.v!=='true'})});return view()}
+  if(a==='addst'){
+    const g=i=>$('#'+i).value.trim();
+    if(!g('n1')||!g('ci')||g('pc')==='')throw new Error('اكتب الاسم والمدينة والنسبة');
+    let logo=null;const f=$('#lg').files[0];
+    if(f){
+      const p=Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+((f.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png');
+      const r=await fetch(U+'/storage/v1/object/store-media/logos/'+p,{method:'POST',headers:{apikey:K,Authorization:'Bearer '+S.access_token,'Content-Type':f.type},body:f});
+      if(!r.ok)throw new Error('فشل رفع الشعار');
+      logo=U+'/storage/v1/object/public/store-media/logos/'+p}
+    const ll=g('ll').split(',').map(Number);
+    const body={category_id:$('#ct').value,name_ar:g('n1'),name_en:g('n2')||null,city:g('ci'),cashback_percent:Number(g('pc')),phone:g('ph')||null,instagram_url:g('ig')||null,about_ar:g('ab')||null,logo_url:logo,opens_at:g('o1')||null,closes_at:g('o2')||null};
+    if(ll.length===2&&ll.every(x=>!isNaN(x)&&x!==0)){body.lat=ll[0];body.lng=ll[1]}
+    await api('/rest/v1/stores',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(body)});
+    toast('تمت إضافة المتجر');return view()}
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-a]');if(!b)return;
+  b.disabled=true;
+  try{await act(b.dataset.a,b.dataset.id,b.closest('.card'),b)}catch(x){toast(msg(x))}finally{b.disabled=false}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='pw')document.querySelector('[data-a=login]').click()});
+boot();
+</script>
+</body>
+</html>
